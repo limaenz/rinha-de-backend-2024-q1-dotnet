@@ -24,7 +24,7 @@ var clientes = new Dictionary<int, int>
 
 app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transacao, SQLiteConnection conn) =>
 {
-    if (!clientes.ContainsKey((id)))
+    if (!clientes.ContainsKey(id))
         return Results.NotFound("Cliente não encontrado.");
 
     if (!transacao.Valida())
@@ -36,7 +36,6 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
         await using var cmd = conn.CreateCommand();
 
         string transacaoSql = transacao.Tipo == "c" ? "transacaoCredito.sql" : "transacaoDebito.sql";
-
         using var scriptTransacao = new StreamReader($"sql/{transacaoSql}");
 
         cmd.CommandText = await scriptTransacao.ReadToEndAsync();
@@ -58,6 +57,25 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
         }
 
         return Results.Ok(new TransacoesResponse(clientes[id], reader.GetInt32(0)));
+    }
+});
+
+app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
+{
+    await using (conn)
+    {
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = "select saldo from cliente where id = @id";
+        cmd.Parameters.AddWithValue("@id", id);
+
+        using var reader = await cmd.ExecuteReaderAsync();
+        await reader.ReadAsync();
+
+        var saldo = reader.GetInt32(0);
+
+        return Results.Ok(new Extrato(new Saldo(saldo, DateTime.UtcNow, clientes[id]), new List<TransacaoRequest>()));
     }
 });
 
