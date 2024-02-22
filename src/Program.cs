@@ -1,4 +1,5 @@
 using System.Data.SQLite;
+using System.Text.Json;
 
 using rinha_de_backend_2024_q1_dotnet.Models;
 
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, SourceGenerationContext.Default);
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
 });
 
 builder.Services.AddScoped<SQLiteConnection>(_ => new SQLiteConnection("DataSource=rinha.db;"));
@@ -28,7 +30,7 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
         return Results.NotFound("Cliente não encontrado.");
 
     if (!transacao.Valida())
-        return Results.UnprocessableEntity("Cliente não encontrado.");
+        return Results.UnprocessableEntity("Transação inválida.");
 
     await using (conn)
     {
@@ -67,7 +69,10 @@ app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
 
-        cmd.CommandText = "select saldo from cliente where id = @id";
+        cmd.CommandText = @"
+        select saldo from cliente where id = @id;
+        select valor, tipo, descricao, realizadoEm from transacao where idCliente = @id;
+        ";
         cmd.Parameters.AddWithValue("@id", id);
 
         using var reader = await cmd.ExecuteReaderAsync();
@@ -75,7 +80,20 @@ app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
 
         var saldo = reader.GetInt32(0);
 
-        return Results.Ok(new Extrato(new Saldo(saldo, DateTime.UtcNow, clientes[id]), new List<TransacaoRequest>()));
+        await reader.NextResultAsync();
+
+        List<TransacoesExtratoResponse> transacoesRealizadas = new();
+        while (await reader.ReadAsync())
+        {
+            transacoesRealizadas.Add(new TransacoesExtratoResponse(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetDateTime(3)
+            ));
+        }
+
+        return Results.Ok(new Extrato(new Saldo(saldo, DateTime.UtcNow, clientes[id]), transacoesRealizadas));
     }
 });
 

@@ -4,7 +4,7 @@ namespace rinha_de_backend_2024_q1_dotnet.Models;
 
 #region request
 
-public sealed record TransacaoRequest
+public record struct TransacaoRequest
 {
     public int Valor { get; set; }
     public string? Tipo { get; set; }
@@ -13,7 +13,7 @@ public sealed record TransacaoRequest
     private readonly static string[] Tipos = ["c", "d"];
 
     public bool Valida()
-        => Tipos.Contains(Tipo)
+        => Tipos.Contains(Tipo ?? string.Empty)
            && !string.IsNullOrEmpty(Descricao)
            && Descricao.Length <= 10
            && Valor > 0;
@@ -23,11 +23,13 @@ public sealed record TransacaoRequest
 
 #region response
 
-public sealed record Extrato(Saldo Saldo, IEnumerable<TransacaoRequest> UltimasTransacoes);
+public record struct Extrato(Saldo Saldo, IEnumerable<TransacoesExtratoResponse> UltimasTransacoes);
 
 public record struct Saldo(int Total, DateTime DataExtrato, int Limite);
 
-public sealed record TransacoesResponse(int limite, int saldo);
+public record struct TransacoesResponse(int limite, int saldo);
+
+public record struct TransacoesExtratoResponse(int Valor, string Tipo, string Descricao, DateTime RealizadoEm);
 
 #endregion
 
@@ -38,6 +40,7 @@ public sealed record TransacoesResponse(int limite, int saldo);
 [JsonSerializable(typeof(DateTime))]
 [JsonSerializable(typeof(Extrato))]
 [JsonSerializable(typeof(Saldo))]
+[JsonSerializable(typeof(TransacoesExtratoResponse))]
 
 public partial class SourceGenerationContext
     : JsonSerializerContext
