@@ -71,7 +71,7 @@ app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
 
         cmd.CommandText = @"
         select saldo from cliente where id = @id;
-        select valor, tipo, descricao, realizadoEm from transacao where idCliente = @id;
+        select valor, tipo, descricao, realizadoEm from transacao where idCliente = @id ORDER BY realizado_em DESC LIMIT 10;
         ";
         cmd.Parameters.AddWithValue("@id", id);
 
@@ -82,7 +82,7 @@ app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
 
         await reader.NextResultAsync();
 
-        List<TransacoesExtratoResponse> transacoesRealizadas = new();
+        List<TransacoesExtratoResponse> transacoesRealizadas = new(10);
         while (await reader.ReadAsync())
         {
             transacoesRealizadas.Add(new TransacoesExtratoResponse(
@@ -96,5 +96,7 @@ app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
         return Results.Ok(new Extrato(new Saldo(saldo, DateTime.UtcNow, clientes[id]), transacoesRealizadas));
     }
 });
+
+app.MapGet("/health", () => Results.Ok("OK"));
 
 app.Run();
