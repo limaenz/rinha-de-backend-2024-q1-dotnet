@@ -1,6 +1,5 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build-env
 WORKDIR /app
-ENV ASPNETCORE_URLS http://*:9999
 
 COPY ./src ./
 RUN apt-get update

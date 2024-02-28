@@ -1,5 +1,6 @@
-using System.Data.SQLite;
 using System.Text.Json;
+
+using Npgsql;
 
 using rinha_de_backend_2024_q1_dotnet.Models;
 
@@ -11,7 +12,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
 });
 
-builder.Services.AddScoped<SQLiteConnection>(_ => new SQLiteConnection("DataSource=rinha.db;"));
+builder.Services.AddNpgsqlDataSource(
+    Environment.GetEnvironmentVariable("Connection_String")
+);
 
 var app = builder.Build();
 
@@ -24,7 +27,7 @@ var clientes = new Dictionary<int, int>
     { 5, 5000 * 100 }
 };
 
-app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transacao, SQLiteConnection conn) =>
+app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transacao, NpgsqlConnection conn) =>
 {
     if (!clientes.ContainsKey(id))
         return Results.NotFound("Cliente não encontrado.");
@@ -37,13 +40,14 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
 
-        string transacaoSql = transacao.Tipo == "c" ? "transacaoCredito.sql" : "transacaoDebito.sql";
-        using var scriptTransacao = new StreamReader($"sql/{transacaoSql}");
+        string transacaoSql = transacao.Tipo == "c"
+        ? await File.ReadAllTextAsync("config/transacaoCredito.sql")
+        : await File.ReadAllTextAsync("config/transacaoDebito.sql");
 
-        cmd.CommandText = await scriptTransacao.ReadToEndAsync();
+        cmd.CommandText = transacaoSql;
         cmd.Parameters.AddWithValue("@Valor", transacao.Valor);
-        cmd.Parameters.AddWithValue("@Tipo", transacao.Tipo);
-        cmd.Parameters.AddWithValue("@Descricao", transacao.Descricao);
+        cmd.Parameters.AddWithValue("@Tipo", transacao.Tipo ?? string.Empty);
+        cmd.Parameters.AddWithValue("@Descricao", transacao.Descricao ?? string.Empty);
         cmd.Parameters.AddWithValue("@Id", id);
 
         using var reader = await cmd.ExecuteReaderAsync();
@@ -51,7 +55,7 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
 
         if (transacao.Tipo == "d")
         {
-            if (reader.GetBoolean(0))
+            if (reader.GetInt32(0) != 0)
                 return Results.UnprocessableEntity("Saldo inconsistente.");
 
             await reader.NextResultAsync();
@@ -62,7 +66,7 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
     }
 });
 
-app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
+app.MapGet("/clientes/{id}/extrato", async (int id, NpgsqlConnection conn) =>
 {
     await using (conn)
     {
@@ -71,7 +75,7 @@ app.MapGet("/clientes/{id}/extrato", async (int id, SQLiteConnection conn) =>
 
         cmd.CommandText = @"
         select saldo from cliente where id = @id;
-        select valor, tipo, descricao, realizadoEm from transacao where idCliente = @id ORDER BY realizado_em DESC LIMIT 10;
+        select valor, tipo, descricao, realizadoEm from transacao where idCliente = @id ORDER BY realizadoEm DESC LIMIT 10;
         ";
         cmd.Parameters.AddWithValue("@id", id);
 
