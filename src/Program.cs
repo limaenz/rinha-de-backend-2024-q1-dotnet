@@ -46,7 +46,6 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
 
         cmd.CommandText = transacaoSql;
         cmd.Parameters.AddWithValue("@Valor", transacao.Valor);
-        cmd.Parameters.AddWithValue("@Tipo", transacao.Tipo ?? string.Empty);
         cmd.Parameters.AddWithValue("@Descricao", transacao.Descricao ?? string.Empty);
         cmd.Parameters.AddWithValue("@Id", id);
 
@@ -68,6 +67,9 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
 
 app.MapGet("/clientes/{id}/extrato", async (int id, NpgsqlConnection conn) =>
 {
+    if (!clientes.ContainsKey(id))
+        return Results.NotFound("Cliente não encontrado.");
+
     await using (conn)
     {
         await conn.OpenAsync();
@@ -77,12 +79,13 @@ app.MapGet("/clientes/{id}/extrato", async (int id, NpgsqlConnection conn) =>
         select saldo from cliente where id = @id;
         select valor, tipo, descricao, realizadoEm from transacao where idCliente = @id ORDER BY realizadoEm DESC LIMIT 10;
         ";
+
         cmd.Parameters.AddWithValue("@id", id);
 
         using var reader = await cmd.ExecuteReaderAsync();
         await reader.ReadAsync();
 
-        var saldo = reader.GetInt32(0);
+        int saldo = reader.GetInt32(0);
 
         await reader.NextResultAsync();
 

@@ -9,10 +9,10 @@ INSERT INTO transacao
     idCliente
 )
 VALUES
-    (@Valor, @Tipo, @Descricao, CURRENT_TIMESTAMP, @Id);
+    (@Valor, 'c', @Descricao, NOW(), @Id);
 
 UPDATE cliente
-SET saldo = (saldo - @Valor)
+SET saldo = (saldo + @Valor)
 WHERE id = @Id
 RETURNING saldo;
 

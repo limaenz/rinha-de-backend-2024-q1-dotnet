@@ -28,7 +28,7 @@ VALUES
 
 -- Atualiza o saldo do cliente
 UPDATE cliente
-SET saldo = saldo + @Valor
+SET saldo = saldo - @Valor
 WHERE id = @Id
   AND (saldo + @Valor >= limite)
 RETURNING saldo;
