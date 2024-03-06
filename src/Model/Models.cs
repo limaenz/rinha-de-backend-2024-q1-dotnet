@@ -1,7 +1,5 @@
 using System.Text.Json.Serialization;
 
-namespace rinha_de_backend_2024_q1_dotnet.Models;
-
 #region request
 
 public record struct TransacaoRequest
