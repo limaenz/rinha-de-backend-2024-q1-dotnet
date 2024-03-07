@@ -1,3 +1,17 @@
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
 CREATE UNLOGGED TABLE cliente (
     id SERIAL PRIMARY KEY,
     limite INTEGER NOT NULL,
@@ -8,13 +22,11 @@ CREATE UNLOGGED TABLE transacao (
     id SERIAL PRIMARY KEY,
     idCliente INTEGER NOT NULL,
     valor INTEGER NOT NULL,
-    tipo CHAR(1) NOT NULL,
     descricao VARCHAR(10) NOT NULL,
     realizadoEm TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_transacao_idCliente ON transacao (idCliente);
-CREATE INDEX idx_idCliente_realizadoEm ON transacao (idCliente, realizadoEm DESC);
+CREATE INDEX idx_transacao_idCliente ON transacao (idCliente ASC);
 
 DO $$
 BEGIN
@@ -28,63 +40,38 @@ VALUES
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION realizar_credito(
-    id_cliente INT,
-    novo_valor INT,
-    descricao_cd VARCHAR(10))
-RETURNS TABLE (
-	novo_saldo INT,
-	possui_erro BOOL,
-	mensagem VARCHAR(20))
-LANGUAGE plpgsql 
-AS $$
-BEGIN
-    PERFORM pg_advisory_xact_lock(id_cliente);
-
-    INSERT INTO transacao (valor, tipo, descricao, realizadoEm, idcliente)
-    VALUES (novo_valor, 'c', descricao_cd, NOW(), id_cliente);
-
-    RETURN QUERY
-    UPDATE cliente
-    SET saldo = saldo + novo_valor
-    WHERE id = id_cliente
-	RETURNING saldo, FALSE, 'ok'::VARCHAR(20);
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION realizar_debito(
-    id_cliente INT,
-    novo_valor INT,
-    descricao_db VARCHAR(10))
-RETURNS TABLE (
-	novo_saldo INT,
-	possui_erro BOOL,
-	mensagem VARCHAR(20))
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION criartransacao(
+  IN id_cliente integer,
+  IN valor integer,
+  IN descricao varchar(10)
+) RETURNS RECORD AS $$
 DECLARE
-    saldo_cliente INT;
-    limite_cliente INT; 
+  clienteencontrado cliente%rowtype;
+  ret RECORD;
 BEGIN
-    PERFORM pg_advisory_xact_lock(id_cliente);
+  SELECT * FROM cliente
+  INTO clienteencontrado
+  WHERE id = id_cliente;
 
-    SELECT saldo, limite
-    INTO saldo_cliente, limite_cliente 
-    FROM cliente WHERE id = id_cliente;
+  IF not found THEN
+    --raise notice'Id do Cliente % não encontrado.', idcliente;
+    SELECT -1 INTO ret;
+    RETURN ret;
+  END IF;
 
-    IF saldo_cliente - novo_valor >= limite_cliente * -1 THEN 
-        INSERT INTO transacao (valor, tipo, descricao, realizadoEm, idcliente)
-        VALUES (novo_valor, 'd', descricao_db, NOW(), id_cliente);
-
-        UPDATE cliente
-        SET saldo = saldo - novo_valor
-        WHERE id = id_cliente;
-
-        RETURN QUERY SELECT saldo, FALSE, 'ok'::VARCHAR(20) FROM cliente WHERE id = id_cliente;
-    ELSE
-        RETURN QUERY SELECT saldo, TRUE, 'saldo insuficiente'::VARCHAR(20) FROM cliente WHERE id = id_cliente;
-    END IF;
-END;
-$$;
+  UPDATE cliente
+    SET saldo = saldo + valor
+    WHERE id = id_cliente AND (valor > 0 OR saldo + valor >= limite)
+    RETURNING saldo, limite
+    INTO ret;
+  raise notice'Ret: %', ret;
+  IF ret.limite is NULL THEN
+    SELECT -2 INTO ret;
+    RETURN ret;
+  END IF;
+  INSERT INTO transacao (valor, descricao, idCliente)
+    VALUES (valor, descricao, id_cliente);
+  RETURN ret;
+END;$$ LANGUAGE plpgsql;
 
 

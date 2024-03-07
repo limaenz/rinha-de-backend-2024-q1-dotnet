@@ -1,9 +1,12 @@
 using System.Text.Json;
 
+using Microsoft.AspNetCore.Http.Timeouts;
+
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddRequestTimeouts(options => options.DefaultPolicy = new RequestTimeoutPolicy { Timeout = TimeSpan.FromSeconds(60) });
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, SourceGenerationContext.Default);
@@ -15,6 +18,7 @@ builder.Services.AddNpgsqlDataSource(
 );
 
 var app = builder.Build();
+app.UseRequestTimeouts();
 
 var clientes = new Dictionary<int, int>
 {
@@ -23,12 +27,6 @@ var clientes = new Dictionary<int, int>
     { 3, 10000 * 100 },
     { 4, 100000 * 100 },
     { 5, 5000 * 100 }
-};
-
-var functionTransaction = new Dictionary<string, string>
-{
-    { "c", "realizar_credito" },
-    { "d", "realizar_debito" }
 };
 
 app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transacao, NpgsqlConnection conn) =>
@@ -44,18 +42,31 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
 
-        cmd.CommandText = $"select novo_saldo, possui_erro, mensagem from {functionTransaction[transacao.Tipo]}($1, $2, $3)";
+        cmd.CommandText = $"select criartransacao($1, $2, $3)";
         cmd.Parameters.AddWithValue(id);
-        cmd.Parameters.AddWithValue(transacao.Valor);
+        cmd.Parameters.AddWithValue(transacao.Tipo == "c" ? transacao.Valor : transacao.Valor * -1);
         cmd.Parameters.AddWithValue(transacao.Descricao);
 
         using var reader = await cmd.ExecuteReaderAsync();
-        await reader.ReadAsync();
 
-        if (reader.GetBoolean(1))
-            return Results.UnprocessableEntity();
+        if (!await reader.ReadAsync())
+            throw new InvalidOperationException("Could not read from db.");
 
-        return Results.Ok(new TransacoesResponse(clientes[id], reader.GetInt32(0)));
+        var record = reader.GetFieldValue<object[]>(0);
+
+        if (record.Length == 1)
+        {
+            var failureCode = (int)record[0];
+            if (failureCode == -1)
+                return Results.NotFound();
+            else if (failureCode == -2)
+                return Results.UnprocessableEntity();
+            else
+                throw new InvalidOperationException("Invalid failure code.");
+        }
+
+        var (saldo, limite) = ((int)record[0], -1 * (int)record[1]);
+        return Results.Ok(new TransacoesResponse(limite, saldo));
     }
 });
 
@@ -70,34 +81,36 @@ app.MapGet("/clientes/{id}/extrato", async (int id, NpgsqlConnection conn) =>
         await using var cmd = conn.CreateCommand();
 
         cmd.CommandText = @"
-SELECT c.saldo AS saldo_cliente, t.valor, t.tipo, t.descricao, t.realizadoEm
-FROM cliente c
-LEFT JOIN (
-    SELECT idCliente, valor, tipo, descricao, realizadoEm
-    FROM transacao
-    WHERE idCliente = $1
-    ORDER BY realizadoEm DESC
-    LIMIT 10
-) AS t ON c.id = t.idCliente
-WHERE c.id = $1;
-
+        SELECT saldo
+        FROM cliente
+        WHERE id = $1
         ";
 
         cmd.Parameters.AddWithValue(id);
+        var saldoResult = await cmd.ExecuteScalarAsync();
+        int.TryParse(saldoResult.ToString(), out int saldo);
+
+        cmd.CommandText = @"
+        SELECT valor, descricao, realizadoEm FROM transacao WHERE idCliente = $1 ORDER BY id DESC LIMIT 10
+        ";
 
         using var reader = await cmd.ExecuteReaderAsync();
-
         List<TransacoesExtratoResponse> transacoesRealizadas = new(10);
-        
+
         while (await reader.ReadAsync())
+        {
+            int valor = reader.GetInt32(0);
+
             transacoesRealizadas.Add(new(
-                reader.GetInt32(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetDateTime(4)
+                Math.Abs(valor),
+                valor < 0 ? "d" : "c",
+                reader.GetString(1),
+                reader.GetDateTime(2)
             ));
 
-        return Results.Ok(new Extrato(new Saldo(reader.GetInt32(0), DateTime.UtcNow, clientes[id]), transacoesRealizadas));
+        }
+
+        return Results.Ok(new Extrato(new Saldo(saldo, DateTime.UtcNow, clientes[id]), transacoesRealizadas));
     }
 });
 
