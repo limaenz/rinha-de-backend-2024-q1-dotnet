@@ -5,7 +5,7 @@
 <img src="https://upload.wikimedia.org/wikipedia/commons/7/7d/Microsoft_.NET_logo.svg" alt="logo dotnet" width="200" height="auto">
 <img src="https://upload.wikimedia.org/wikipedia/commons/2/29/Postgresql_elephant.svg" alt="logo postgres" width="200" height="auto">
 
-Submissão feita com:
+## Submissão feita com:
 - `nginx` - load balancer
 - `postgres` - banco de daos
 - `dotnet 8.0` - api
