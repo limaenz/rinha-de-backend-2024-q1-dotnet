@@ -25,5 +25,7 @@ $ cd docker
 $ docker-compose up -d
 ```
 
+![image](https://github.com/limaenz/rinha-de-backend-2024-q1-dotnet/assets/100207943/d73c9ab9-1c22-4a53-8291-701134adae82)
+
 [@linkedin](https://www.linkedin.com/in/enzolima/)
 [@github](https://github.com/limaenz/)
