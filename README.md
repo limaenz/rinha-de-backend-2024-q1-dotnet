@@ -11,6 +11,10 @@ Submissão feita com:
 - `dotnet 8.0` - api
 - [repositório da api](https://github.com/limaenz/rinha-de-backend-2024-q1-dotnet)
 
+## Resultado
+
+![image](https://github.com/limaenz/rinha-de-backend-2024-q1-dotnet/assets/100207943/d73c9ab9-1c22-4a53-8291-701134adae82)
+
 ## 📁 Como baixar o projeto e testar
 
 ```bash
@@ -24,8 +28,6 @@ $ cd docker
 #Iniciar os contêineres
 $ docker-compose up -d
 ```
-
-![image](https://github.com/limaenz/rinha-de-backend-2024-q1-dotnet/assets/100207943/d73c9ab9-1c22-4a53-8291-701134adae82)
 
 [@linkedin](https://www.linkedin.com/in/enzolima/)
 [@github](https://github.com/limaenz/)
