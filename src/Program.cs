@@ -52,8 +52,8 @@ app.MapPost("/clientes/{id}/transacoes", async (int id, TransacaoRequest transac
         await using var cmd = conn.CreateCommand();
 
         cmd.CommandText = transacao.Tipo == "d"
-        ? $"select novo_saldo, possui_erro from realizar_debito($1, $2, $3)"
-        : $"select novo_saldo, possui_erro from realizar_credito($1, $2, $3)";
+        ? $"select saldoAtual, erro from realizar_debito($1, $2, $3)"
+        : $"select saldoAtual, erro from realizar_credito($1, $2, $3)";
 
         cmd.Parameters.AddWithValue(id);
         cmd.Parameters.AddWithValue(valor);
