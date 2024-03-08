@@ -22,6 +22,7 @@ CREATE UNLOGGED TABLE transacao (
     id SERIAL PRIMARY KEY,
     idCliente INTEGER NOT NULL,
     valor INTEGER NOT NULL,
+    tipo CHAR(1) NOT NULL,
     descricao VARCHAR(10) NOT NULL,
     realizadoEm TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -40,38 +41,61 @@ VALUES
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION criartransacao(
-  IN id_cliente integer,
-  IN valor integer,
-  IN descricao varchar(10)
-) RETURNS RECORD AS $$
-DECLARE
-  clienteencontrado cliente%rowtype;
-  ret RECORD;
+CREATE OR REPLACE FUNCTION realizar_credito(
+    id_cliente INT,
+    novo_valor INT,
+    descricao_cd VARCHAR(10))
+RETURNS TABLE (
+	novo_saldo INT,
+	possui_erro BOOL)
+LANGUAGE plpgsql 
+AS $$
 BEGIN
-  SELECT * FROM cliente
-  INTO clienteencontrado
-  WHERE id = id_cliente;
+    PERFORM pg_advisory_xact_lock(id_cliente);
 
-  IF not found THEN
-    --raise notice'Id do Cliente % não encontrado.', idcliente;
-    SELECT -1 INTO ret;
-    RETURN ret;
-  END IF;
+    INSERT INTO transacao (valor, tipo, descricao, realizadoEm, idCliente)
+    VALUES (novo_valor, 'c', descricao_cd, NOW(), id_cliente);
 
-  UPDATE cliente
-    SET saldo = saldo + valor
-    WHERE id = id_cliente AND (valor > 0 OR saldo + valor >= limite)
-    RETURNING saldo, limite
-    INTO ret;
-  raise notice'Ret: %', ret;
-  IF ret.limite is NULL THEN
-    SELECT -2 INTO ret;
-    RETURN ret;
-  END IF;
-  INSERT INTO transacao (valor, descricao, idCliente)
-    VALUES (valor, descricao, id_cliente);
-  RETURN ret;
-END;$$ LANGUAGE plpgsql;
+    RETURN QUERY
+    UPDATE cliente
+    SET saldo = saldo + novo_valor
+    WHERE id = id_cliente
+	RETURNING saldo, FALSE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION realizar_debito(
+    id_cliente INT,
+    novo_valor INT,
+    descricao_db VARCHAR(10))
+RETURNS TABLE (
+	novo_saldo INT,
+	possui_erro BOOL)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    saldo_cliente INT;
+    limite_cliente INT; 
+BEGIN
+    PERFORM pg_advisory_xact_lock(id_cliente);
+
+    SELECT saldo, limite
+    INTO saldo_cliente, limite_cliente 
+    FROM cliente WHERE id = id_cliente;
+
+    IF saldo_cliente - novo_valor >= limite_cliente * -1 THEN 
+        INSERT INTO transacao (valor, tipo, descricao, realizadoEm, idCliente)
+        VALUES (novo_valor, 'd', descricao_db, NOW(), id_cliente);
+
+        UPDATE cliente
+        SET saldo = saldo - novo_valor
+        WHERE id = id_cliente;
+
+        RETURN QUERY SELECT saldo, FALSE FROM cliente WHERE id = id_cliente;
+    ELSE
+        RETURN QUERY SELECT saldo, TRUE FROM cliente WHERE id = id_cliente;
+    END IF;
+END;
+$$;
 
 

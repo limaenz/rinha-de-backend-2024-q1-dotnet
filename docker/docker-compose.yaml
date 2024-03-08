@@ -2,7 +2,7 @@ version: '3.5'
 
 services:
   api01: &api_servers
-    image: limaenz/rinhabackend-q1-dotnet:27022024
+    image: limaenz/rinhabackend-q1-dotnet:07032024
     hostname: api01
     container_name: api01_rinha
     environment:

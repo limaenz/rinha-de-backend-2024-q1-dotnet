@@ -4,17 +4,14 @@ using System.Text.Json.Serialization;
 
 public record struct TransacaoRequest
 {
-    public int Valor { get; set; }
+    public object  Valor { get; set; }
     public string? Tipo { get; set; }
     public string? Descricao { get; set; }
 
     private readonly static string[] Tipos = ["c", "d"];
 
     public bool Valida()
-        => Tipos.Contains(Tipo ?? string.Empty)
-           && !string.IsNullOrEmpty(Descricao)
-           && Descricao.Length <= 10
-           && Valor > 0;
+        => Tipos.Contains(Tipo);
 }
 
 #endregion
@@ -25,7 +22,7 @@ public record struct Extrato(Saldo Saldo, IEnumerable<TransacoesExtratoResponse>
 
 public record struct Saldo(int Total, DateTime DataExtrato, int Limite);
 
-public record struct TransacoesResponse(int limite, int saldo);
+public record struct TransacoesResponse(int saldo, int limite);
 
 public record struct TransacoesExtratoResponse(int Valor, string Tipo, string Descricao, DateTime RealizadoEm);
 
